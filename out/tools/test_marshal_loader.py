@@ -22,6 +22,22 @@ class MarshalTests(unittest.TestCase):
     def test_text_float(self):
         self.assertEqual(self.load(b'f\x041.25'),1.25)
 
+    def test_sets_keep_all_elements(self):
+        for count in (9,20):
+            for tag,kind in ((b'<',set),(b'>',frozenset)):
+                raw=tag+struct.pack('<i',count)+b''.join(b'i'+struct.pack('<i',i) for i in range(count))
+                self.assertEqual(self.load(raw),kind(range(count)))
+
+    def test_complex_value_and_truncation(self):
+        raw=b'y'+struct.pack('<dd',1.25,-3.5)
+        self.assertEqual(self.load(raw),complex(1.25,-3.5))
+        with self.assertRaises(MarshalError):
+            self.load(raw[:-1])
+
+    def test_tuple_dictionary_key_retains_its_type(self):
+        raw=b'{('+struct.pack('<i',2)+b'i'+struct.pack('<i',1)+b'i'+struct.pack('<i',2)+b'T0'
+        self.assertEqual(self.load(raw),{(1,2):True})
+
     def test_truncated_and_invalid_limb(self):
         for raw in [b'f\x041.2',b'l'+struct.pack('<i',2)+b'\0\0',
                     b'l'+struct.pack('<iH',1,32768)]:

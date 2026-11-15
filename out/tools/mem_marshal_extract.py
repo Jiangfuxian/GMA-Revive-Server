@@ -104,8 +104,11 @@ class Loader:
                 return v
             if t in (TYPE_COMPLEX, TYPE_BINARY_COMPLEX):
                 if t == TYPE_BINARY_COMPLEX:
+                    if self.p + 16 > len(self.d):
+                        raise MarshalError('二进制复数被截断')
+                    real, imag = struct.unpack_from('<dd', self.d, self.p)
                     self.p += 16
-                    return 0j
+                    return complex(real, imag)
                 raise MarshalError('complex-text')
             if t == TYPE_LONG:
                 n = self.r_long()
@@ -158,9 +161,9 @@ class Loader:
                 if t == TYPE_LIST:
                     return list(items)
                 if t == TYPE_SET:
-                    return set(items[:8]) if len(items) < 16 else None
+                    return set(items)
                 if t == TYPE_FROZENSET:
-                    return frozenset(items[:8]) if len(items) < 16 else None
+                    return frozenset(items)
                 return items
             if t == TYPE_DICT:
                 out = {}
@@ -171,7 +174,7 @@ class Loader:
                     v = self.r_object()
                     if isinstance(v, tuple) and v == ('NULL',):
                         return out
-                    out[k if not isinstance(k, tuple) else str(k)] = v
+                    out[k] = v
                     if len(out) > 1 << 20:
                         raise MarshalError('dict too big')
             if t == TYPE_CODE:
