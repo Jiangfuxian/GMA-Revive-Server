@@ -7,6 +7,7 @@ Unicorn VA 0x1309310 实际返回值。输出统一使用 .bin；19 73 头的
 运行：python out/tools/npk_unpack.py 输入.npk 输出目录 [条目上限]
 """
 import hashlib
+import io
 import json
 import struct
 import sys
@@ -18,28 +19,56 @@ class DecodeError(ValueError):
     """损坏或尚未支持的数据必须显式失败。"""
 
 
-def parse_archive(path):
-    data = Path(path).read_bytes()
-    if len(data) < 24 or data[:4] != b'NXPK':
+def read_index(stream, size):
+    """只读取索引；偏移规则与 gen_npkfilelist_md5.block_md5s 保持一致。"""
+    stream.seek(0)
+    header = stream.read(24)
+    if len(header) != 24 or header[:4] != b'NXPK':
         raise DecodeError('不是完整的 NXPK 文件')
-    count = struct.unpack_from('<I', data, 4)[0]
-    index = struct.unpack_from('<I', data, 20)[0]
+    count = struct.unpack_from('<I', header, 4)[0]
+    index = struct.unpack_from('<I', header, 20)[0]
     index_end = index + count * 28
-    if index < 24 or index_end > len(data):
+    if index < 24 or index_end > size:
         raise DecodeError('索引区越界')
     entries = []
     seen = set()
+    spans = []
+    stream.seek(index)
     for i in range(count):
+        record = stream.read(28)
+        if len(record) != 28:
+            raise DecodeError('索引区被截断')
         key, offset, stored, decoded, hash64, codec = struct.unpack_from(
-            '<IIIIQI', data, index + i * 28)
+            '<IIIIQI', record)
+        encoded_offset = codec >= 62
+        if encoded_offset:
+            offset ^= ((-100 - decoded) & 0xffffffff) ^ 0x7a090d89
+            codec -= 62
+        if codec not in (0, 1, 2):
+            raise DecodeError('尚未验证的压缩类型：%d' % codec)
         end = offset + stored
         overlaps_index = offset < index_end and end > index
-        if key in seen or offset < 24 or end > len(data) or overlaps_index:
+        if key in seen or (stored and (offset < 24 or end > size or overlaps_index)):
             raise DecodeError('条目哈希重复或存储区越界：%08X' % key)
+        if not stored and decoded:
+            raise DecodeError('空存储块声明了非零解压长度：%08X' % key)
+        if codec == 0 and stored != decoded:
+            raise DecodeError('原始存储块长度不匹配：%08X' % key)
         seen.add(key)
+        if stored:
+            spans.append((offset, end))
         entries.append(dict(hash=key, offset=offset, stored_size=stored,
                             decoded_size=decoded, hash64=hash64, codec=codec,
-                            after_index=offset >= index_end))
+                            encoded_offset=encoded_offset, after_index=offset >= index_end))
+    spans.sort()
+    if any(a[1] > b[0] for a, b in zip(spans, spans[1:])):
+        raise DecodeError('存储块互相重叠')
+    return entries
+
+
+def parse_archive(path):
+    data = Path(path).read_bytes()
+    entries = read_index(io.BytesIO(data), len(data))
     return entries, data
 
 
@@ -91,14 +120,23 @@ def lz4_decompress(src, expected):
 
 
 def decode_entry(entry, data):
+    if not 0 <= entry['decoded_size'] <= 64 * 1024 * 1024:
+        raise DecodeError('目标长度超过工具限制')
     start = entry['offset']
     raw = data[start:start+entry['stored_size']]
     codec = entry['codec']
-    if codec == 2:
+    if not raw and entry['decoded_size'] == 0:
+        result = b''
+    elif codec == 0:
+        result = raw
+        if len(result) != entry['decoded_size']:
+            raise DecodeError('原始存储块长度不匹配')
+    elif codec == 2:
         result = lz4_decompress(raw, entry['decoded_size'])
     elif codec == 1:
-        result = zlib.decompress(raw)
-        if len(result) != entry['decoded_size']:
+        decoder = zlib.decompressobj()
+        result = decoder.decompress(raw, entry['decoded_size'] + 1)
+        if len(result) != entry['decoded_size'] or not decoder.eof or decoder.unconsumed_tail:
             raise DecodeError('zlib 输出长度不匹配')
     else:
         raise DecodeError('尚未验证的压缩类型：%d' % codec)

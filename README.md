@@ -139,6 +139,51 @@ Windows 可运行 `deploy/build.cmd` 构建四类服务，或 `deploy/build-game
 
 维护者发布公开版本时，先运行 `python out/tools/audit_public_source.py` 审核当前 Git 文件，再通过 `python out/tools/publish_public_source.py` 导出已提交源树。该流程只接续公开仓库历史，不携带原私有仓库的提交、分支或标签。公开提交使用 GitHub noreply 邮箱。
 
+## 安卓离线适配工具
+
+新增适配路线使用实际取得的 **Android APK 1.0.8 / 脚本 1.0.125 / armeabi-v7a**，与本文上方的服务端 1.0.128 兼容路线分别验证。当前完成启动脚本补丁、源码导入器和 APK 构建工具，已生成固定测试签名的 APK，v1/v2/v3 签名与对齐检查通过；手机启动、资源补齐、战斗及存档仍待实际验收。
+
+公开仓库只收录适配工具、运行档案、自动检查和中文说明。原 APK、NPK、ARM 引擎、离线业务源码输入及签名密钥由使用者在本地提供。这里的命令不是下载完整客户端的入口。
+
+在 Linux、Python 3.12 和系统 liblz4 环境下，配置仓库外的私有输入目录后生成启动补丁：
+
+```sh
+python out/tools/android_offline_startup.py \
+  --candidate "$HSQSL_PRIVATE_CANDIDATE" \
+  --npk "$HSQSL_MOBILE_SCRIPT_NPK" \
+  --bindings "$HSQSL_PRIVATE_BINDINGS" \
+  --output "$HSQSL_PRIVATE_BUILD/startup"
+```
+
+`--candidate` 指离线业务候选源码目录；工具排除桌面 `drpf` 包装器，给已知的旧启动观察器加入独立安装入口，并覆盖为仓库中的精确运行档案。未知或不完整的观察器结构会拒绝构建。`--npk` 指本次手机 APK 内的 `assets/script.npk`；`--bindings` 指本地已核验的 Rotor 解码参数。原手机 NPK 与 drpf 的 SHA256 固定核对，不把 PC 包、其他手机版本或随意改写的版本号放行。
+
+随后使用 Android SDK 的 zipalign 生成已对齐的未签名 APK。以下 SDK 变量应指向相应可执行文件：
+
+```sh
+python out/tools/android_offline_apk.py \
+  --apk "$HSQSL_ORIGINAL_APK" \
+  --script-npk "$HSQSL_PRIVATE_BUILD/startup/script.npk" \
+  --startup-report "$HSQSL_PRIVATE_BUILD/startup/build-report.json" \
+  --zipalign "$HSQSL_ZIPALIGN" \
+  --output "$HSQSL_PRIVATE_BUILD/offline-unsigned.apk" \
+  --report "$HSQSL_PRIVATE_BUILD/apk-report.json"
+```
+
+工具校验原 APK 身份及补丁记录，只替换 `assets/script.npk`，删除已失效的 JAR 签名项，保留渠道元数据和其他原始文件。重打包及后续对齐/签名后分别逐文件检查 SHA256。签名后的比较仅排除由 apksigner 独立验证的签名元数据；新增非签名文件、重复路径或游戏内容变化仍拒绝。它不替换原生库，不把 32 位引擎标成 64 位，也不覆盖原文件或账号存档。
+
+需要签名时，在第二条命令额外传入 `--apksigner-jar`、`--keystore`、`--key-alias` 和 `--store-pass-env`；最后一个参数是已经设置的环境变量名称，密码值不进入命令参数或源码。密钥密码不同时可再传 `--key-pass-env`。持续使用同一份本地签名密钥，供后续版本覆盖升级；重新签名的包不能直接覆盖不同签名的官方安装。
+
+本地公开检查：
+
+```sh
+python -m unittest discover -s out/tools -p test_android_offline.py -v
+python -m unittest discover -s out/tools -p test_npk_unpack.py -v
+python -m unittest discover -s out/tools -p test_marshal_loader.py -v
+python out/tools/audit_public_source.py
+```
+
+GitHub Actions 执行同一组 **32 项合成样本检查**及公开源码审计，不下载原游戏、不读取私有密钥，也不把自动检查通过写为 Android 画面验收。NPK 索引的 `hash64` 暂保留原值，其语义与原生更新校验是否接受补丁仍需确认；原包 `app_check` / `verify_app_files` 保持原行为。
+
 ## 技术资料索引
 
 | 文档 | 内容 |

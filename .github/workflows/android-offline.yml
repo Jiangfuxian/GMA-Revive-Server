@@ -1,0 +1,32 @@
+name: Android offline source checks
+
+on:
+  push:
+    branches: [main, 'codex/android-offline-*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  startup-and-packaging:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+      - name: Install NPK compression library
+        run: sudo apt-get update && sudo apt-get install -y liblz4-1
+      - name: Test Android startup and APK packaging with synthetic inputs
+        run: python -m unittest discover -s out/tools -p test_android_offline.py -v
+      - name: Test NPK and marshal readers
+        run: |
+          python -m unittest discover -s out/tools -p test_npk_unpack.py -v
+          python -m unittest discover -s out/tools -p test_marshal_loader.py -v
+      - name: Audit public source files
+        run: python out/tools/audit_public_source.py
