@@ -220,9 +220,16 @@ class ApkTests(unittest.TestCase):
                 if name != 'assets/script.npk' and not apk_tool.signature_entry(name):
                     self.assertEqual(z.read(name), entries[name])
         with zipfile.ZipFile(self.output, 'a') as z:
-            z.writestr('unexpected.bin', b'post-processing-corruption')
+            z.writestr('META-INF/MANIFEST.MF', b'new-signature-manifest-fixture')
+            z.writestr('META-INF/LOCAL.SF', b'new-signature-fixture')
+            z.writestr('META-INF/LOCAL.RSA', b'new-signature-fixture')
         with self.assertRaisesRegex(ValueError, 'content verification failed'):
             apk_tool.verify_output(self.output, report['_entry_sha256'])
+        apk_tool.verify_output(self.output, report['_entry_sha256'], allow_signatures=True)
+        with zipfile.ZipFile(self.output, 'a') as z:
+            z.writestr('unexpected.bin', b'post-processing-corruption')
+        with self.assertRaisesRegex(ValueError, 'content verification failed'):
+            apk_tool.verify_output(self.output, report['_entry_sha256'], allow_signatures=True)
 
     def test_invalid_archive_cleans_partial_output_and_existing_output_is_preserved(self):
         with zipfile.ZipFile(self.source, 'w') as z:

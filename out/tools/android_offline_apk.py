@@ -40,9 +40,12 @@ def validate_archive(archive):
         raise ValueError('assets/script.npk is missing')
 
 
-def verify_output(path, expected):
+def verify_output(path, expected, allow_signatures=False):
+    """Check payload bytes; APK signatures are verified separately by apksigner."""
     with zipfile.ZipFile(path) as output:
-        actual = {info.filename: digest(output.open(info)) for info in output.infolist()}
+        validate_archive(output)
+        actual = {info.filename: digest(output.open(info)) for info in output.infolist()
+                  if not (allow_signatures and signature_entry(info.filename))}
     if actual != expected:
         raise ValueError('APK content verification failed')
 
@@ -147,7 +150,7 @@ def main():
             subprocess.run(command, check=True)
             subprocess.run(['java', '-jar', str(args.apksigner_jar), 'verify', '--verbose', str(signed)], check=True)
             built = signed
-        verify_output(built, expected)
+        verify_output(built, expected, allow_signatures=signing)
         report['final_content_verified'] = True
         os.replace(built, args.output)
     report.update(signed=signing, aligned=bool(args.zipalign),
