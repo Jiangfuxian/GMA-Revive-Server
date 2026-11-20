@@ -1,0 +1,142 @@
+name: Dragon Android first-boot download test
+
+on:
+  workflow_dispatch:
+    inputs:
+      apk_url:
+        description: "Direct HTTPS download URL for the user-provided Dragon APK (no login tokens in URL)"
+        required: true
+        type: string
+      wait_minutes:
+        description: "How long to leave the game running for first-boot downloads (1-20)"
+        required: false
+        default: "12"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  install-run-download:
+    # The APK contains libUE4.so for arm64-v8a. Use a native ARM64 runner,
+    # not an x86_64 emulator that cannot load the game's UE4 library.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install ARM64 Android emulator image
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager --install \
+            "platform-tools" \
+            "emulator" \
+            "platforms;android-35" \
+            "system-images;android-35;google_apis;arm64-v8a"
+
+      - name: Download APK
+        env:
+          APK_URL: ${{ inputs.apk_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work output
+          curl --fail --location --retry 3 --retry-delay 3 \
+            --connect-timeout 30 --max-time 1800 \
+            "$APK_URL" -o work/dragon.apk
+          test -s work/dragon.apk
+          echo "APK_SIZE=$(stat -c%s work/dragon.apk)" >> "$GITHUB_ENV"
+          sha256sum work/dragon.apk | tee output/apk-sha256.txt
+          unzip -t work/dragon.apk >/dev/null
+          echo "APK ZIP integrity: OK" | tee output/apk-integrity.txt
+
+      - name: Create ARM64 Android virtual device
+        shell: bash
+        run: |
+          echo no | avdmanager create avd \
+            --name dragon-arm64 \
+            --package "system-images;android-35;google_apis;arm64-v8a" \
+            --device "pixel_2"
+          AVD_CONFIG="$HOME/.android/avd/dragon-arm64.avd/config.ini"
+          {
+            echo "hw.ramSize=4096"
+            echo "vm.heapSize=512"
+            echo "disk.dataPartition.size=8G"
+            echo "hw.gpu.enabled=yes"
+            echo "hw.gpu.mode=swiftshader_indirect"
+          } >> "$AVD_CONFIG"
+
+      - name: Boot ARM64 emulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          emulator -accel-check || true
+          nohup emulator -avd dragon-arm64 \
+            -no-window -no-audio -no-boot-anim -no-snapshot \
+            -gpu swiftshader_indirect -accel auto \
+            > output/emulator.log 2>&1 &
+          adb wait-for-device
+          for i in $(seq 1 180); do
+            BOOTED="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')"
+            if [ "$BOOTED" = "1" ]; then break; fi
+            sleep 5
+          done
+          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
+          adb shell getprop ro.product.cpu.abi | tee output/emulator-abi.txt
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+
+      - name: Install and launch Dragon
+        shell: bash
+        run: |
+          set -euo pipefail
+          adb install -r work/dragon.apk | tee output/install.txt
+          adb shell monkey -p com.zulong.drc.mi 1 | tee output/launch.txt
+          adb logcat -c
+          WAIT_MINUTES="${{ inputs.wait_minutes }}"
+          if ! [[ "$WAIT_MINUTES" =~ ^[0-9]+$ ]] || [ "$WAIT_MINUTES" -lt 1 ] || [ "$WAIT_MINUTES" -gt 20 ]; then
+            WAIT_MINUTES=12
+          fi
+          echo "Leaving the game open for ${WAIT_MINUTES} minutes."
+          for i in $(seq 1 "$WAIT_MINUTES"); do
+            sleep 60
+            adb shell pidof com.zulong.drc.mi > "output/process-minute-$i.txt" || true
+            adb exec-out screencap -p > "output/screen-minute-$i.png" || true
+          done
+
+      - name: Collect logs and downloaded-data inventory
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p output/device-data
+          adb logcat -d -v threadtime > output/logcat.txt 2>&1 || true
+          adb shell dumpsys activity activities > output/activities.txt 2>&1 || true
+          adb shell dumpsys meminfo com.zulong.drc.mi > output/meminfo.txt 2>&1 || true
+          adb shell pm path com.zulong.drc.mi > output/package-path.txt 2>&1 || true
+          adb shell 'for p in /sdcard/Android/data/com.zulong.drc.mi /sdcard/Android/obb/com.zulong.drc.mi /sdcard/Android/data/com.zulong.drc.mi/files; do echo "=== $p"; du -ah "$p" 2>/dev/null | sort -h | tail -80; done' > output/downloaded-data-inventory.txt 2>&1 || true
+          adb pull /sdcard/Android/data/com.zulong.drc.mi output/device-data/android-data > output/pull-android-data.txt 2>&1 || true
+          adb pull /sdcard/Android/obb/com.zulong.drc.mi output/device-data/android-obb > output/pull-android-obb.txt 2>&1 || true
+          adb exec-out screencap -p > output/final-screen.png 2>/dev/null || true
+          cat output/emulator-abi.txt 2>/dev/null || true
+          cat output/downloaded-data-inventory.txt 2>/dev/null || true
+
+      - name: Upload diagnostic results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dragon-android-first-boot-diagnostics
+          path: output/
+          if-no-files-found: warn
+          retention-days: 3
