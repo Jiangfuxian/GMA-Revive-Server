@@ -120,14 +120,11 @@ jobs:
         if: always()
         shell: bash
         run: |
-          mkdir -p output/device-data
           adb logcat -d -v threadtime > output/logcat.txt 2>&1 || true
           adb shell dumpsys activity activities > output/activities.txt 2>&1 || true
           adb shell dumpsys meminfo com.zulong.drc.mi > output/meminfo.txt 2>&1 || true
           adb shell pm path com.zulong.drc.mi > output/package-path.txt 2>&1 || true
           adb shell 'for p in /sdcard/Android/data/com.zulong.drc.mi /sdcard/Android/obb/com.zulong.drc.mi /sdcard/Android/data/com.zulong.drc.mi/files; do echo "=== $p"; du -ah "$p" 2>/dev/null | sort -h | tail -80; done' > output/downloaded-data-inventory.txt 2>&1 || true
-          adb pull /sdcard/Android/data/com.zulong.drc.mi output/device-data/android-data > output/pull-android-data.txt 2>&1 || true
-          adb pull /sdcard/Android/obb/com.zulong.drc.mi output/device-data/android-obb > output/pull-android-obb.txt 2>&1 || true
           adb exec-out screencap -p > output/final-screen.png 2>/dev/null || true
           cat output/emulator-abi.txt 2>/dev/null || true
           cat output/downloaded-data-inventory.txt 2>/dev/null || true
