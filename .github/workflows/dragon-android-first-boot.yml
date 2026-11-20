@@ -13,7 +13,7 @@ on:
       wait_minutes:
         description: "Minutes to leave the game open for data download (1-20)"
         required: false
-        default: "8"
+        default: "5"
         type: string
 
 permissions:
@@ -82,16 +82,18 @@ jobs:
           disable-animations: true
           script: bash scripts/ci_dragon_emulator.sh
 
-      - name: Collect emulator and game diagnostics
+      - name: Summarize captured game diagnostics
         if: always()
         shell: bash
         run: |
           mkdir -p output
-          timeout 20s adb devices -l > output/adb-status.txt 2>&1 || true
-          timeout 25s adb logcat -d -v threadtime > output/logcat.txt 2>&1 || true
-          timeout 20s adb shell dumpsys activity activities > output/activity.txt 2>&1 || true
-          timeout 20s adb shell 'for p in /sdcard/Android/data/com.zulong.drc.mi /sdcard/Android/obb/com.zulong.drc.mi; do echo "$p"; du -ah "$p" 2>/dev/null | sort -h | tail -100; done' > output/downloaded-files-inventory.txt 2>&1 || true
-          timeout 20s adb exec-out screencap -p > output/final-screen.png 2>/dev/null || true
+          cat output/test-progress.txt 2>/dev/null || true
+          cat output/install.txt 2>/dev/null || true
+          cat output/resource-inventory-while-live.txt 2>/dev/null | tail -100 || true
+          if [ -s output/logcat-while-live.txt ]; then
+            echo "Captured emulator logcat before shutdown"
+            grep -Ei 'ANR in|Application Not Responding|FATAL EXCEPTION|Fatal signal|crash|libUE4|linker|nativebridge' output/logcat-while-live.txt | tail -100 > output/error-summary.txt || true
+          fi
           find output -type f -size +100M -delete
 
       - name: Upload diagnostic report
