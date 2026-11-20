@@ -11,7 +11,7 @@ collect_live_diagnostics() {
   timeout 20s adb shell dumpsys activity processes > output/processes-while-live.txt 2>&1 || true
   timeout 20s adb shell dumpsys window windows > output/windows-while-live.txt 2>&1 || true
   timeout 20s adb shell dumpsys connectivity > output/network-while-live.txt 2>&1 || true
-  timeout 20s adb shell 'for p in /sdcard/Android/data/com.zulong.drc.mi /sdcard/Android/obb/com.zulong.drc.mi /sdcard/Android/data/com.zulong.drc.mi/files; do echo "=== $p"; ls -la "$p" 2>&1 | head -40; du -ah "$p" 2>&1 | sort -h | tail -100; done' > output/resource-inventory-while-live.txt 2>&1 || true
+  timeout 20s adb shell 'for p in /sdcard/Android/data/com.zulong.drc.mi /sdcard/Android/obb/com.zulong.drc.mi /sdcard/Android/data/com.zulong.drc.mi/files; do echo "=== $p"; ls -la "$p" 2>&1 | head -40; du -ak "$p" 2>&1 | sort -n | tail -100; done' > output/resource-inventory-while-live.txt 2>&1 || true
   timeout 20s adb exec-out screencap -p > output/final-before-shutdown.png 2>/dev/null || true
 }
 trap collect_live_diagnostics EXIT
@@ -44,6 +44,16 @@ adb exec-out screencap -p > output/screen-before-dismiss.png || true
 adb shell input tap 1255 430 || true
 sleep 3
 adb exec-out screencap -p > output/screen-after-dismiss.png || true
+# The game presents a user agreement and privacy policy on first launch.
+# Do not consent automatically: a dedicated, explicit approval flag is required.
+if [ "${ACCEPT_GAME_TERMS:-false}" != "true" ]; then
+  echo "BLOCKED: game user agreement requires explicit approval; no game terms were accepted" | tee -a output/test-progress.txt
+  exit 0
+fi
+echo "Approval flag was provided; accepting the game's first-launch agreement" | tee -a output/test-progress.txt
+adb shell input tap 980 595 || true
+sleep 20
+adb exec-out screencap -p > output/screen-after-agreement.png || true
 timeout 15s adb shell uiautomator dump /sdcard/window.xml > output/ui-dump-status.txt 2>&1 || true
 timeout 15s adb exec-out cat /sdcard/window.xml > output/ui-after-dismiss.xml 2>/dev/null || true
 timeout 20s adb shell dumpsys activity activities > output/activity-after-dismiss.txt 2>&1 || true
