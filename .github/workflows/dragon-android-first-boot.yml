@@ -18,9 +18,9 @@ permissions:
 
 jobs:
   install-run-download:
-    # The APK contains libUE4.so for arm64-v8a. Use a native ARM64 runner,
-    # not an x86_64 emulator that cannot load the game's UE4 library.
-    runs-on: ubuntu-24.04-arm
+    # Standard GitHub Ubuntu x64 runners support hardware-accelerated Android emulators.
+    # API 35 x86_64 images can translate ARM64 app libraries (verify in the run logs).
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -43,7 +43,7 @@ jobs:
             "platform-tools" \
             "emulator" \
             "platforms;android-35" \
-            "system-images;android-35;google_apis;arm64-v8a"
+            "system-images;android-35;google_apis;x86_64"
 
       - name: Download APK
         env:
@@ -66,7 +66,7 @@ jobs:
         run: |
           echo no | avdmanager create avd \
             --name dragon-arm64 \
-            --package "system-images;android-35;google_apis;arm64-v8a" \
+            --package "system-images;android-35;google_apis;x86_64" \
             --device "pixel_2"
           AVD_CONFIG="$HOME/.android/avd/dragon-arm64.avd/config.ini"
           {
@@ -81,6 +81,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          echo "Checking KVM availability"
+          ls -l /dev/kvm || true
           emulator -accel-check || true
           nohup emulator -avd dragon-arm64 \
             -no-window -no-audio -no-boot-anim -no-snapshot \
@@ -94,6 +96,7 @@ jobs:
           done
           test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
           adb shell getprop ro.product.cpu.abi | tee output/emulator-abi.txt
+          adb shell getprop ro.build.version.sdk | tee output/emulator-api.txt
           adb shell settings put global window_animation_scale 0
           adb shell settings put global transition_animation_scale 0
           adb shell settings put global animator_duration_scale 0
