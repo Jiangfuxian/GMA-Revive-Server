@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - ".github/workflows/dragon-android-first-boot.yml"
+      - "scripts/ci_dragon_emulator.sh"
   workflow_dispatch:
     inputs:
       apk_url:
