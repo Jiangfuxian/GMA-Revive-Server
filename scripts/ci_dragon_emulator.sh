@@ -38,25 +38,21 @@ if ! adb shell monkey -p com.zulong.drc.mi -c android.intent.category.LAUNCHER 1
 fi
 cat output/launch.txt
 sleep 8
-adb exec-out screencap -p > output/screen-before-dismiss.png || true
-# The Android 35 immersive-mode "Got it" hint obscured every screenshot in run 44737438154.
-# On the emulator's 1920x1080 landscape surface, its button center is (1255,430) on the 1920x1080 landscape screenshot.
-adb shell input tap 1255 430 || true
-sleep 3
-adb exec-out screencap -p > output/screen-after-dismiss.png || true
-# The game presents a user agreement and privacy policy on first launch.
-# Do not consent automatically: a dedicated, explicit approval flag is required.
+adb exec-out screencap -p > output/screen-before-agreement.png || true
+# In run 44741406228, the previous tap (1255,430) opened the "User Agreement"
+# hyperlink and trapped the test in an in-app WebView. Do not click it.
+# The consent popup's actual Accept-button center is (1140,692) on 1920x1080.
 if [ "${ACCEPT_GAME_TERMS:-false}" != "true" ]; then
-  echo "BLOCKED: game user agreement requires explicit approval; no game terms were accepted" | tee -a output/test-progress.txt
+  echo "BLOCKED: explicit approval for the first-launch agreement was not provided" | tee -a output/test-progress.txt
   exit 0
 fi
-echo "Approval flag was provided; accepting the game's first-launch agreement" | tee -a output/test-progress.txt
-adb shell input tap 1140 692 || true
-sleep 35
+echo "User-approved acceptance: tap (1140,692) without opening policy links" | tee -a output/test-progress.txt
+adb shell input tap 1140 692
+sleep 30
 adb exec-out screencap -p > output/screen-after-agreement.png || true
 timeout 15s adb shell uiautomator dump /sdcard/window.xml > output/ui-dump-status.txt 2>&1 || true
-timeout 15s adb exec-out cat /sdcard/window.xml > output/ui-after-dismiss.xml 2>/dev/null || true
-timeout 20s adb shell dumpsys activity activities > output/activity-after-dismiss.txt 2>&1 || true
+timeout 15s adb exec-out cat /sdcard/window.xml > output/ui-after-agreement.xml 2>/dev/null || true
+timeout 20s adb shell dumpsys activity activities > output/activity-after-agreement.txt 2>&1 || true
 WAIT_MINUTES="${WAIT_MINUTES_INPUT:-5}"
 if ! [[ "$WAIT_MINUTES" =~ ^[0-9]+$ ]] || [ "$WAIT_MINUTES" -lt 1 ] || [ "$WAIT_MINUTES" -gt 20 ]; then
   WAIT_MINUTES=5
