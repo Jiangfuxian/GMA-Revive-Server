@@ -32,6 +32,10 @@ APK 原文件不提交到 Git。它体积较大且属于第三方游戏客户端
 python scripts/inspect_apk.py /path/to/dragon.apk
 ```
 
+## GitHub ARM64 云端首次启动测试
+
+仓库的 Actions 中提供 `Dragon Android first-boot download test` 工作流。它使用 GitHub 的 `ubuntu-24.04-arm` 托管运行器和 ARM64 Android 35 系统映像，下载 APK、安装、启动并等待首次资源下载，同时保存 logcat、屏幕截图和外部存储数据目录清单。由于 APK 不在 Git 仓库中，手动运行工作流时需要提供可由 GitHub runner 直接访问的 HTTPS APK 下载地址。不要把带账号口令或长期访问令牌的 URL 粘贴到公开仓库工作流输入中。该工作流只上传诊断信息，不会把游戏资源包发布到公开仓库。
+
 ## 在 Android 设备上安装与启动
 
 需要 Android Platform Tools（adb），并在设备上启用 USB 调试：
