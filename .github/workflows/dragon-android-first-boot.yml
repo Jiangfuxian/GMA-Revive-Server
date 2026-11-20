@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       apk_url:
-        description: "Direct HTTPS download URL for the user-provided Dragon APK (no login tokens in URL)"
+        description: "Public-with-link Google Drive share URL or direct HTTPS APK download URL"
         required: true
         type: string
       wait_minutes:
@@ -52,9 +52,14 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p work output
-          curl --fail --location --retry 3 --retry-delay 3 \
-            --connect-timeout 30 --max-time 1800 \
-            "$APK_URL" -o work/dragon.apk
+          if [[ "$APK_URL" == *"drive.google.com"* ]]; then
+            python3 -m pip install --user --quiet gdown
+            "$HOME/.local/bin/gdown" --fuzzy "$APK_URL" -O work/dragon.apk
+          else
+            curl --fail --location --retry 3 --retry-delay 3 \
+              --connect-timeout 30 --max-time 1800 \
+              "$APK_URL" -o work/dragon.apk
+          fi
           test -s work/dragon.apk
           echo "APK_SIZE=$(stat -c%s work/dragon.apk)" >> "$GITHUB_ENV"
           sha256sum work/dragon.apk | tee output/apk-sha256.txt
