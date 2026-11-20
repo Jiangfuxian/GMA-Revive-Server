@@ -68,6 +68,7 @@ jobs:
         timeout-minutes: 20
         env:
           WAIT_MINUTES_INPUT: ${{ inputs.wait_minutes }}
+          ACCEPT_GAME_TERMS: 'true'
         with:
           api-level: 35
           target: google_apis
