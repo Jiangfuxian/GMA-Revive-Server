@@ -40,10 +40,13 @@ cat output/launch.txt
 sleep 8
 adb exec-out screencap -p > output/screen-before-dismiss.png || true
 # The Android 35 immersive-mode "Got it" hint obscured every screenshot in run 44737438154.
-# On the emulator's 1920x1080 landscape surface, its button center is near (1467,500).
-adb shell input tap 1467 500 || true
+# On the emulator's 1920x1080 landscape surface, its button center is (1255,430) on the 1920x1080 landscape screenshot.
+adb shell input tap 1255 430 || true
 sleep 3
 adb exec-out screencap -p > output/screen-after-dismiss.png || true
+timeout 15s adb shell uiautomator dump /sdcard/window.xml > output/ui-dump-status.txt 2>&1 || true
+timeout 15s adb exec-out cat /sdcard/window.xml > output/ui-after-dismiss.xml 2>/dev/null || true
+timeout 20s adb shell dumpsys activity activities > output/activity-after-dismiss.txt 2>&1 || true
 WAIT_MINUTES="${WAIT_MINUTES_INPUT:-5}"
 if ! [[ "$WAIT_MINUTES" =~ ^[0-9]+$ ]] || [ "$WAIT_MINUTES" -lt 1 ] || [ "$WAIT_MINUTES" -gt 20 ]; then
   WAIT_MINUTES=5
@@ -52,6 +55,7 @@ for i in $(seq 1 "$WAIT_MINUTES"); do
   sleep 60
   echo "minute=$i" | tee -a output/test-progress.txt
   adb shell pidof com.zulong.drc.mi > "output/process-minute-$i.txt" || true
+  timeout 10s adb shell dumpsys activity processes | grep -A12 -B5 "com.zulong.drc.mi" > "output/process-state-minute-$i.txt" || true
   adb exec-out screencap -p > "output/screen-minute-$i.png" || true
 done
 echo "RUNTIME WATCH COMPLETE" | tee -a output/test-progress.txt
