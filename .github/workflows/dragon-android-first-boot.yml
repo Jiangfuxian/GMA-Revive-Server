@@ -38,7 +38,7 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install ARM64 Android emulator image
+      - name: Install Android x86_64 emulator image
         shell: bash
         run: |
           yes | sdkmanager --licenses >/dev/null
@@ -72,7 +72,7 @@ jobs:
           unzip -t work/dragon.apk >/dev/null
           echo "APK ZIP integrity: OK" | tee output/apk-integrity.txt
 
-      - name: Create ARM64 Android virtual device
+      - name: Create Android x86_64 virtual device
         shell: bash
         run: |
           echo no | avdmanager create avd \
