@@ -51,8 +51,8 @@ if [ "${ACCEPT_GAME_TERMS:-false}" != "true" ]; then
   exit 0
 fi
 echo "Approval flag was provided; accepting the game's first-launch agreement" | tee -a output/test-progress.txt
-adb shell input tap 980 595 || true
-sleep 20
+adb shell input tap 1140 692 || true
+sleep 35
 adb exec-out screencap -p > output/screen-after-agreement.png || true
 timeout 15s adb shell uiautomator dump /sdcard/window.xml > output/ui-dump-status.txt 2>&1 || true
 timeout 15s adb exec-out cat /sdcard/window.xml > output/ui-after-dismiss.xml 2>/dev/null || true
