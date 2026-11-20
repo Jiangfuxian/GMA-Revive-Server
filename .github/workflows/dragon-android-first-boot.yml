@@ -62,7 +62,7 @@ jobs:
           if [[ "$APK_URL" == *"drive.google.com"* ]]; then
             python3 -m venv .venv
             .venv/bin/pip install --quiet gdown
-            .venv/bin/gdown --fuzzy "$APK_URL" -O work/dragon.apk
+            .venv/bin/gdown --fuzzy "$APK_URL" -O work/dragon.apk || { echo "gdown download failed; checking Drive direct-download fallback"; curl --fail --location --retry 2 --connect-timeout 30 --max-time 1800 "https://drive.usercontent.google.com/download?id=17gVmYTHXvJHBAX7IR6fruTDbihh8I49V&export=download&confirm=t" -o work/dragon.apk; }
           else
             curl --fail --location --retry 3 --retry-delay 3 \
               --connect-timeout 30 --max-time 1800 \
@@ -136,12 +136,17 @@ jobs:
         if: always()
         shell: bash
         run: |
-          adb logcat -d -v threadtime > output/logcat.txt 2>&1 || true
-          adb shell dumpsys activity activities > output/activities.txt 2>&1 || true
-          adb shell dumpsys meminfo com.zulong.drc.mi > output/meminfo.txt 2>&1 || true
-          adb shell pm path com.zulong.drc.mi > output/package-path.txt 2>&1 || true
-          adb shell 'for p in /sdcard/Android/data/com.zulong.drc.mi /sdcard/Android/obb/com.zulong.drc.mi /sdcard/Android/data/com.zulong.drc.mi/files; do echo "=== $p"; du -ah "$p" 2>/dev/null | sort -h | tail -80; done' > output/downloaded-data-inventory.txt 2>&1 || true
-          adb exec-out screencap -p > output/final-screen.png 2>/dev/null || true
+          mkdir -p output
+          if adb devices | grep -qE 'device$'; then
+            timeout 20s adb logcat -d -v threadtime > output/logcat.txt 2>&1 || true
+            timeout 20s adb shell dumpsys activity activities > output/activities.txt 2>&1 || true
+            timeout 20s adb shell dumpsys meminfo com.zulong.drc.mi > output/meminfo.txt 2>&1 || true
+            timeout 20s adb shell pm path com.zulong.drc.mi > output/package-path.txt 2>&1 || true
+            timeout 20s adb shell 'for p in /sdcard/Android/data/com.zulong.drc.mi /sdcard/Android/obb/com.zulong.drc.mi /sdcard/Android/data/com.zulong.drc.mi/files; do echo "=== $p"; du -ah "$p" 2>/dev/null | sort -h | tail -80; done' > output/downloaded-data-inventory.txt 2>&1 || true
+            timeout 20s adb exec-out screencap -p > output/final-screen.png 2>/dev/null || true
+          else
+            echo "No Android emulator device booted; install/launch stage was not reached." > output/device-not-booted.txt
+          fi
           cat output/emulator-abi.txt 2>/dev/null || true
           cat output/downloaded-data-inventory.txt 2>/dev/null || true
 
