@@ -80,7 +80,7 @@ jobs:
           heap-size: 512M
           disk-size: 12G
           emulator-boot-timeout: 240
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-window -gpu swiftshader -no-snapshot -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: bash scripts/ci_dragon_emulator.sh
 
