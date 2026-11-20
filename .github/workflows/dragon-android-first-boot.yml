@@ -24,7 +24,7 @@ jobs:
     # Standard GitHub Ubuntu x64 runners support hardware-accelerated Android emulators.
     # API 35 x86_64 images can translate ARM64 app libraries (verify in the run logs).
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 35
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -92,20 +92,30 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "Checking KVM availability"
-          ls -l /dev/kvm || true
-          emulator -accel-check || true
+          echo "Checking KVM availability" | tee output/kvm-check.txt
+          (ls -l /dev/kvm && emulator -accel-check) >> output/kvm-check.txt 2>&1 || true
+          cat output/kvm-check.txt
           nohup emulator -avd dragon-x86 \
             -no-window -no-audio -no-boot-anim -no-snapshot \
             -gpu swiftshader_indirect -accel auto \
             > output/emulator.log 2>&1 &
-          adb wait-for-device
-          for i in $(seq 1 180); do
-            BOOTED="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')"
+          if ! timeout 180s adb wait-for-device; then
+            echo "Timed out waiting for ADB" | tee output/boot-failure.txt
+            adb devices -l | tee output/adb-devices.txt || true
+            tail -n 150 output/emulator.log || true
+            exit 1
+          fi
+          BOOTED=""
+          for i in $(seq 1 60); do
+            BOOTED="$(timeout 10s adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
             if [ "$BOOTED" = "1" ]; then break; fi
             sleep 5
           done
-          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
+          if [ "$BOOTED" != "1" ]; then
+            echo "Timed out waiting for Android boot completion" | tee output/boot-failure.txt
+            tail -n 200 output/emulator.log || true
+            exit 1
+          fi
           adb shell getprop ro.product.cpu.abi | tee output/emulator-abi.txt
           adb shell getprop ro.build.version.sdk | tee output/emulator-api.txt
           adb shell settings put global window_animation_scale 0
@@ -135,6 +145,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p output
+          tail -n 500 output/emulator.log > output/emulator-tail.log 2>/dev/null || true
+          adb devices -l > output/adb-devices.txt 2>&1 || true
           if adb devices | grep -qE 'device$'; then
             timeout 20s adb logcat -d -v threadtime > output/logcat.txt 2>&1 || true
             timeout 20s adb shell dumpsys activity activities > output/activities.txt 2>&1 || true
