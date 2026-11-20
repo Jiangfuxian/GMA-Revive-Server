@@ -1,6 +1,9 @@
 name: Dragon Android first-boot download test
 
 on:
+  push:
+    paths:
+      - ".github/workflows/dragon-android-first-boot.yml"
   workflow_dispatch:
     inputs:
       apk_url:
@@ -47,14 +50,17 @@ jobs:
 
       - name: Download APK
         env:
-          APK_URL: ${{ inputs.apk_url }}
+          APK_URL_INPUT: ${{ inputs.apk_url }}
+          APK_URL_DEFAULT: https://drive.google.com/file/d/17gVmYTHXvJHBAX7IR6fruTDbihh8I49V/view?usp=drive_link
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p work output
+          APK_URL="${APK_URL_INPUT:-$APK_URL_DEFAULT}"
           if [[ "$APK_URL" == *"drive.google.com"* ]]; then
-            python3 -m pip install --user --quiet gdown
-            "$HOME/.local/bin/gdown" --fuzzy "$APK_URL" -O work/dragon.apk
+            python3 -m venv .venv
+            .venv/bin/pip install --quiet gdown
+            .venv/bin/gdown --fuzzy "$APK_URL" -O work/dragon.apk
           else
             curl --fail --location --retry 3 --retry-delay 3 \
               --connect-timeout 30 --max-time 1800 \
