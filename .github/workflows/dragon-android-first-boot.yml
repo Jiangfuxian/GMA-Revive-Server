@@ -53,21 +53,13 @@ jobs:
       - name: Download APK
         env:
           APK_URL_INPUT: ${{ inputs.apk_url }}
-          APK_URL_DEFAULT: https://drive.google.com/file/d/17gVmYTHXvJHBAX7IR6fruTDbihh8I49V/view?usp=drive_link
+          APK_URL_DEFAULT: https://drive.usercontent.google.com/download?id=17gVmYTHXvJHBAX7IR6fruTDbihh8I49V&export=download&confirm=t
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p work output
           APK_URL="${APK_URL_INPUT:-$APK_URL_DEFAULT}"
-          if [[ "$APK_URL" == *"drive.google.com"* ]]; then
-            python3 -m venv .venv
-            .venv/bin/pip install --quiet gdown
-            .venv/bin/gdown --fuzzy "$APK_URL" -O work/dragon.apk || { echo "gdown download failed; checking Drive direct-download fallback"; curl --fail --location --retry 2 --connect-timeout 30 --max-time 1800 "https://drive.usercontent.google.com/download?id=17gVmYTHXvJHBAX7IR6fruTDbihh8I49V&export=download&confirm=t" -o work/dragon.apk; }
-          else
-            curl --fail --location --retry 3 --retry-delay 3 \
-              --connect-timeout 30 --max-time 1800 \
-              "$APK_URL" -o work/dragon.apk
-          fi
+          curl --fail --location --retry 3 --retry-delay 3 --connect-timeout 30 --max-time 1800 "$APK_URL" -o work/dragon.apk
           test -s work/dragon.apk
           echo "APK_SIZE=$(stat -c%s work/dragon.apk)" >> "$GITHUB_ENV"
           sha256sum work/dragon.apk | tee output/apk-sha256.txt
@@ -77,11 +69,17 @@ jobs:
       - name: Create Android x86_64 virtual device
         shell: bash
         run: |
+          set -euo pipefail
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
           echo no | avdmanager create avd \
-            --name dragon-arm64 \
+            --name dragon-x86 \
             --package "system-images;android-35;google_apis;x86_64" \
-            --device "pixel_2"
-          AVD_CONFIG="$HOME/.android/avd/dragon-arm64.avd/config.ini"
+            --device pixel_2 \
+            --force \
+            --path "$ANDROID_AVD_HOME/dragon-x86.avd"
+          AVD_CONFIG="$ANDROID_AVD_HOME/dragon-x86.avd/config.ini"
+          test -f "$AVD_CONFIG"
           {
             echo "hw.ramSize=4096"
             echo "vm.heapSize=512"
@@ -90,14 +88,14 @@ jobs:
             echo "hw.gpu.mode=swiftshader_indirect"
           } >> "$AVD_CONFIG"
 
-      - name: Boot ARM64 emulator
+      - name: Boot Android emulator
         shell: bash
         run: |
           set -euo pipefail
           echo "Checking KVM availability"
           ls -l /dev/kvm || true
           emulator -accel-check || true
-          nohup emulator -avd dragon-arm64 \
+          nohup emulator -avd dragon-x86 \
             -no-window -no-audio -no-boot-anim -no-snapshot \
             -gpu swiftshader_indirect -accel auto \
             > output/emulator.log 2>&1 &
