@@ -43,7 +43,7 @@ jobs:
       - name: Install Android x86_64 emulator image
         shell: bash
         run: |
-          yes | sdkmanager --licenses >/dev/null
+          mkdir -p output
           sdkmanager --install \
             "platform-tools" \
             "emulator" \
