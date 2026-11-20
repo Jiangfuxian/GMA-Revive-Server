@@ -13,7 +13,7 @@ on:
       wait_minutes:
         description: "Minutes to leave the game open for data download (1-20)"
         required: false
-        default: "5"
+        default: "7"
         type: string
 
 permissions:
@@ -77,7 +77,7 @@ jobs:
           cores: 2
           ram-size: 3072M
           heap-size: 512M
-          disk-size: 8G
+          disk-size: 12G
           emulator-boot-timeout: 240
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           disable-animations: true
