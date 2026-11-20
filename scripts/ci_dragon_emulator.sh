@@ -21,6 +21,9 @@ for prop in ro.product.cpu.abi ro.product.cpu.abilist ro.dalvik.vm.native.bridge
   printf '%s: ' "$prop" | tee -a output/device-info.txt
   adb shell getprop "$prop" | tr -d '\r' | tee -a output/device-info.txt
 done
+echo "Graphics capability probe" | tee output/graphics-capability.txt
+adb shell getprop ro.opengles.version | tee -a output/graphics-capability.txt
+adb shell dumpsys SurfaceFlinger 2>&1 | grep -Ei 'GLES|OpenGL|renderer|version' | head -25 | tee -a output/graphics-capability.txt || true
 echo "Install APK" | tee output/test-progress.txt
 if ! adb install -r work/dragon.apk > output/install.txt 2>&1; then
   cat output/install.txt
